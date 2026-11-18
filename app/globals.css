@@ -1,26 +1,193 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --canvas: #f6f8f4;
+  --surface: #fcfdfb;
+  --ink: #111513;
+  --muted: #5b6460;
+  --line: #d9ded8;
+  --grid: rgba(17, 21, 19, 0.045);
+
+  /* harmless */
+  --lime: #c9f25a;
+  --lime-ink: #4d730c;
+  --lime-wash: #eef9cc;
+  --ok-wash: #e4f6b4;
+
+  /* malicious */
+  --alarm: #ea5a40;
+  --alarm-ink: #b02e16;
+  --alarm-wash: #fff0ec;
+  --alarm-line: #f2b6a9;
+
+  /* suspicious */
+  --warn: #e3a312;
+  --warn-ink: #8f6a02;
+  --warn-wash: #fdf2c3;
+  --warn-line: #ecd27a;
+
+  /* undetected / unknown */
+  --quiet: #8b948f;
+  --quiet-wash: #e8ebe6;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+
+  --color-lime: var(--lime);
+  --color-lime-ink: var(--lime-ink);
+  --color-lime-wash: var(--lime-wash);
+  --color-ok-wash: var(--ok-wash);
+
+  --color-alarm: var(--alarm);
+  --color-alarm-ink: var(--alarm-ink);
+  --color-alarm-wash: var(--alarm-wash);
+  --color-alarm-line: var(--alarm-line);
+
+  --color-warn: var(--warn);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-wash: var(--warn-wash);
+  --color-warn-line: var(--warn-line);
+
+  --color-quiet: var(--quiet);
+  --color-quiet-wash: var(--quiet-wash);
+
+  --font-display: var(--font-khand), "Arial Narrow", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Switzer", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background-color: var(--canvas);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 84px 84px, 84px 84px;
+    color: var(--ink);
+  }
+
+  ::selection {
+    background: var(--lime);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+
+  /* Small tracked labels used for data headings and chips */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}
+
+/* The ring draws itself once when results arrive */
+@media (prefers-reduced-motion: no-preference) {
+  .donut-seg {
+    animation: donut-sweep 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  @keyframes donut-sweep {
+    from {
+      stroke-dasharray: 0 100;
+    }
+  }
+}
+
+/* ---- Ambient status blob ------------------------------------------------
+   Two blurred, slowly morphing shapes fixed behind the page. Their colour
+   follows the verdict via data-verdict on .ambient. */
+.ambient {
+  --blob: var(--lime);
+  --blob-opacity: 0.3;
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient[data-verdict="malicious"] {
+  --blob: var(--alarm);
+  --blob-opacity: 0.24;
+}
+
+.ambient[data-verdict="suspicious"] {
+  --blob: var(--warn);
+  --blob-opacity: 0.28;
+}
+
+.ambient[data-verdict="harmless"] {
+  --blob: var(--lime);
+  --blob-opacity: 0.32;
+}
+
+.ambient[data-verdict="undetected"] {
+  --blob: var(--quiet);
+  --blob-opacity: 0.24;
+}
+
+.ambient-blob {
+  position: absolute;
+  background-color: var(--blob);
+  opacity: var(--blob-opacity);
+  filter: blur(72px);
+  will-change: transform;
+  transition: background-color 900ms ease, opacity 900ms ease;
+}
+
+.ambient-blob-a {
+  width: 46rem;
+  height: 38rem;
+  top: -12rem;
+  left: -10rem;
+  border-radius: 63% 37% 54% 46% / 55% 48% 52% 45%;
+}
+
+.ambient-blob-b {
+  width: 34rem;
+  height: 30rem;
+  right: -8rem;
+  bottom: -10rem;
+  border-radius: 40% 60% 35% 65% / 55% 40% 60% 45%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ambient-blob-a {
+    animation: blob-a 26s ease-in-out infinite alternate;
+  }
+
+  .ambient-blob-b {
+    animation: blob-b 32s ease-in-out infinite alternate;
+  }
+
+  @keyframes blob-a {
+    to {
+      transform: translate(5rem, 4rem) rotate(16deg) scale(1.08);
+      border-radius: 40% 60% 46% 54% / 48% 58% 42% 52%;
+    }
+  }
+
+  @keyframes blob-b {
+    to {
+      transform: translate(-6rem, -3rem) rotate(-14deg) scale(1.1);
+      border-radius: 58% 42% 60% 40% / 42% 56% 44% 58%;
+    }
+  }
 }
