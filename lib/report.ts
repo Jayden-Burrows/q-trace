@@ -1,5 +1,6 @@
 import type { EngineCategory, EngineResult, ReportStats, Verdict } from "@/types/domain";
 import type { VtUrlReport } from "@/types/vt";
+import type { DomainInfo } from "@/types/domain";
 
 export const SAFE_BROWSING_REPORT_URL = "https://safebrowsing.google.com/safebrowsing/report_phish/";
 
@@ -132,21 +133,22 @@ export function toReportView(vt: VtUrlReport): ReportView {
     };
 }
 
-// "Feb 04, 2026 at 14:32 UTC"
-export function formatUtc(date: Date): string {
+// "Feb 04, 2026 at 14:32 EST" (EDT in summer: the zone name comes from the date)
+export function formatEST(date: Date): string {
     const day = date.toLocaleDateString("en-US", {
         month: "short",
         day: "2-digit",
         year: "numeric",
-        timeZone: "UTC",
+        timeZone: "America/New_York",
     });
     const time = date.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
-        timeZone: "UTC",
+        timeZone: "America/New_York",
+        timeZoneName: "short",
     });
-    return `${day} at ${time} UTC`;
+    return `${day} at ${time}`;
 }
 
 export function buildOverview(view: ReportView): string {
@@ -166,9 +168,15 @@ function truncate(text: string, max: number): string {
     return text.length > max ? `${text.slice(0, max - 1)}...` : text;
 }
 
+// "2026-02-04" from an RDAP timestamp; falls back to the raw text if it isn't a date.
+function isoDay(value: string): string {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? value : d.toISOString().slice(0, 10);
+}
+
 // Plain-text report meant to be pasted into Google's Safe Browsing report form.
 // Kept far under the 1000-word limit.
-export function buildReportText(view: ReportView): string {
+export function buildReportText(view: ReportView, rdapInfo: DomainInfo | null): string {
     const { stats } = view;
     const lines: string[] = [
         "A link found through a QR code was flagged by security engines.",
@@ -179,8 +187,14 @@ export function buildReportText(view: ReportView): string {
     if (view.finalUrl) lines.push(`Final destination: ${view.finalUrl}`);
     if (view.site.title) lines.push(`Page title: ${truncate(view.site.title, 120)}`);
 
+    if (rdapInfo?.rdapFound) {
+        if (rdapInfo.registrar) lines.push(`Registrar: ${truncate(rdapInfo.registrar, 120)}`);
+        if (rdapInfo.registeredAt) lines.push(`Domain registered: ${isoDay(rdapInfo.registeredAt)}`);
+        if (rdapInfo.expiresAt) lines.push(`Domain expires: ${isoDay(rdapInfo.expiresAt)}`);
+    }
+
     lines.push(
-        `Analyzed by VirusTotal: ${formatUtc(view.analyzedAt)}`,
+        `Analyzed by VirusTotal: ${formatEST(view.analyzedAt)}`,
         `Result: ${stats.malicious} malicious, ${stats.suspicious} suspicious, ${stats.harmless} harmless, ${stats.undetected} undetected (${view.totalEngines} engines)`,
     );
 

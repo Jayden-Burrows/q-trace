@@ -1,13 +1,15 @@
 import { ExternalIcon } from "@/components/icons";
 import { SAFE_BROWSING_REPORT_URL, buildReportText, type ReportView } from "@/lib/report";
+import type { DomainInfo } from "@/types/domain";
 import CopyButton from "./CopyButton";
 
 type ReportPanelProps = {
     view: ReportView;
+    rdapInfo: DomainInfo | null;
 };
 
-export default function ReportPanel({ view }: ReportPanelProps) {
-    const reportText = buildReportText(view);
+export default function ReportPanel({ view, rdapInfo }: ReportPanelProps) {
+    const reportText = buildReportText(view, rdapInfo);
 
     return (
         <section aria-labelledby="report-heading" className="mt-8 border border-ink bg-surface">

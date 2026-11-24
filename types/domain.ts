@@ -55,10 +55,13 @@ export type QrCode = {
 };
 
 export type DomainInfo = {
-    domain: string;
+    domain: string; // registrable domain, lowercase (e.g. "example.com")
     registrar: string | null;
     abuseEmail: string | null;
     registeredAt: string | null;
+    expiresAt: string | null;
+    changedAt: string | null;
+    nameservers: string[];
     rdapFound: boolean;
     fetchedAt: string;
 };

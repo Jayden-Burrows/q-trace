@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import SingleFileDropzone from "@/components/FileUpload";
 import ResultsDashboard from "@/components/analyze/ResultsDashboard";
 import { EmptyState, ErrorPanel, ResultsSkeleton } from "@/components/analyze/StatusPanels";
 import jsQR from "jsqr";
-import { VtErrorBody, VtUrlReport } from "@/types/vt";
+import type { VtUrlReport } from "@/types/vt";
+import type { DomainResponse, ScreenshotResponse } from "@/types/api";
+import type { DomainInfo } from "@/types/domain";
 import AmbientBlob from "@/components/AmbientBlob";
 import { getVerdict } from "@/lib/report";
 
@@ -15,6 +17,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [screenshot, setScreenShot] = useState<string | null>(null);
+  const [screenshotPending, setScreenshotPending] = useState(false);
+  const [domainInfo, setDomainInfo] = useState<DomainInfo | null>(null);
+  // Bumped on every new upload or clear so a slow screenshot/RDAP response from an
+  // earlier upload can't overwrite the current one.
+  const runRef = useRef(0);
   const verdict = virusTotalData ? getVerdict(virusTotalData.data.attributes.last_analysis_stats) : null;
 
   function decodeQRCode(file: File): Promise<string | null> {
@@ -81,7 +89,7 @@ export default function Home() {
     }
   }
 
-  const MAX_POLLS = 10;
+  const MAX_REQUEST_ATTEMPTS = 10;
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   async function fetchVirusTotal(url: string, rescan = false) {
@@ -92,7 +100,7 @@ export default function Home() {
     });
     let analysisId: string | null = null;
 
-    for (let polls = 0; polls <= MAX_POLLS; polls++) {
+    for (let requestAttempts = 0; requestAttempts <= MAX_REQUEST_ATTEMPTS; requestAttempts++) {
       const data = await res.json().catch(() => null);
 
       if (res.status === 429 && analysisId) {
@@ -114,9 +122,45 @@ export default function Home() {
     throw new Error("VirusTotal is taking longer than expected. Try again in a minute.");
   }
 
+  // Screenshot and RDAP are extras. They never throw: if either fails, the
+  // VirusTotal result still shows.
+  async function fetchSiteShot(url: string): Promise<string | null> {
+    try {
+      const res = await fetch("/api/site-shot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as ScreenshotResponse;
+      return data.screenshot.url;
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchRDAP(url: string): Promise<DomainInfo | null> {
+    try {
+      const res = await fetch("/api/rdap", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as DomainResponse;
+      return data.domain;
+    } catch {
+      return null;
+    }
+  }
+
   async function handleFile(file: File | null) {
+    const run = ++runRef.current;
     setError(null);
     setVirusTotalData(null);
+    setScreenShot(null);
+    setScreenshotPending(false);
+    setDomainInfo(null);
 
     if (!file) {
       setFileName(null);
@@ -140,6 +184,18 @@ export default function Home() {
         return;
       }
 
+      // The screenshot and RDAP lookups don't depend on VirusTotal, so start them
+      // now and let them fill in whenever they finish.
+      setScreenshotPending(true);
+      fetchSiteShot(validatedUrl).then((shot) => {
+        if (runRef.current !== run) return;
+        setScreenShot(shot);
+        setScreenshotPending(false);
+      });
+      fetchRDAP(validatedUrl).then((info) => {
+        if (runRef.current === run) setDomainInfo(info);
+      });
+
       // fetch the associated report
       await fetchVirusTotal(validatedUrl);
     } catch (e) {
@@ -150,6 +206,10 @@ export default function Home() {
   }
 
   function handleClear() {
+    runRef.current++;
+    setScreenShot(null);
+    setScreenshotPending(false);
+    setDomainInfo(null);
     setVirusTotalData(null);
     setError(null);
     setFileName(null);
@@ -173,7 +233,8 @@ export default function Home() {
           </h1>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted">
             Upload a QR image to see where it leads before you scan it. The code is decoded in your
-            browser, and only the link is checked against VirusTotal&apos;s security engines.
+            browser. Only the link is sent out: to VirusTotal&apos;s security engines, to Site-Shot for a
+            screenshot of the page, and its domain to a public RDAP registry lookup.
           </p>
 
           <div className="mt-8">
@@ -187,7 +248,7 @@ export default function Home() {
           ) : error ? (
             <ErrorPanel message={error} />
           ) : virusTotalData ? (
-            <ResultsDashboard report={virusTotalData} fileName={fileName} onClear={handleClear} />
+            <ResultsDashboard report={virusTotalData} fileName={fileName} screenshot={screenshot} screenshotPending={screenshotPending} rdapInfo={domainInfo} onClear={handleClear} />
           ) : (
             <EmptyState />
           )}

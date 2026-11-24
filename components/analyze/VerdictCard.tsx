@@ -1,6 +1,6 @@
 import type { Verdict } from "@/types/domain";
 import { GlobeIcon, ShieldIcon, type ShieldVariant } from "@/components/icons";
-import { VERDICT_COPY, buildOverview, formatUtc, type ReportView } from "@/lib/report";
+import { VERDICT_COPY, buildOverview, formatEST, type ReportView } from "@/lib/report";
 import CopyButton from "./CopyButton";
 import DonutChart from "./DonutChart";
 
@@ -83,7 +83,7 @@ export default function VerdictCard({ view, fileName }: VerdictCardProps) {
                                 {copy.heading}
                             </h2>
                             <p className="mt-2 break-words text-sm text-muted">
-                                {fileName ? `${fileName} · ` : ""}analyzed {formatUtc(view.analyzedAt)}
+                                {fileName ? `${fileName} · ` : ""}analyzed {formatEST(view.analyzedAt)}
                             </p>
                         </div>
                     </div>

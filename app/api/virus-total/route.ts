@@ -1,5 +1,3 @@
-// app/api/virus-total/route.ts
-//
 //   POST /api/virus-total   { url, rescan? }
 //        - rescan false/omitted: look up VirusTotal's stored report. If it is
 //          fresh, return it. If it is stale, rescan it. If VT has never seen
@@ -22,20 +20,15 @@ const VT_BASE = "https://www.virustotal.com/api/v3";
 const TIMEOUT_MS = 10_000;
 
 // A stored VT report older than this is treated as stale and re-analyzed.
-// Set to Infinity to always trust whatever VT has stored.
-const MAX_REPORT_AGE_SECONDS = 24 * 60 * 60;
+const MAX_REPORT_AGE_SECONDS = 24 * 60 * 60; // 24 hours
 
-// Hint for how long the client should wait between polls. At 4 requests per
-// minute for the whole API key, polling faster than this just burns quota.
+// Represents how long the client should wait between polls.
 const POLL_AFTER_SECONDS = 15;
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 
 // Slack when checking that the URL report reflects the finished analysis.
-// I could not verify how VT's two timestamps relate, so log both while testing.
-const FRESHNESS_SLACK_SECONDS = 120;
+const FRESHNESS_SLACK_SECONDS = 300;
 
-// Analysis ids look like "u-<64 hex>-<hex or digits>". Validating the shape keeps
-// user input from being spliced into the path of a request to VT.
 const ANALYSIS_ID = /^u-[0-9a-f]{64}-[0-9a-f]+$/i;
 
 // ---------- small helpers ----------
@@ -47,8 +40,8 @@ function fail(status: number, code: ErrorCode, message: string, retryAfterSecond
     );
 }
 
-// Maps a non-OK VT response we did not handle ourselves. 404 is NOT handled
-// here because its meaning depends on the call.
+// Maps a non-OK VT response to a message. 404 is not handled in this
+// function since it means something different for each API call.
 function upstreamFail(res: Response) {
     if (res.status === 429) {
         const retryAfter = Number(res.headers.get("retry-after"));
@@ -74,8 +67,8 @@ function completed(report: VtUrlReport) {
     return NextResponse.json({ status: "completed", report });
 }
 
-// Same checks the client does. The client can be bypassed, so the server
-// must not trust it. The fragment is dropped so the VT id matches the client's.
+// Since the client can be bypassed, the server rechecks the things that the client
+// already did.
 function parseUrl(raw: unknown): URL | NextResponse {
     if (typeof raw !== "string" || raw.trim().length === 0 || raw.length > 2048) {
         return fail(400, "invalid_url", "Missing or invalid url.");
@@ -100,7 +93,7 @@ function parseUrl(raw: unknown): URL | NextResponse {
     return url;
 }
 
-// VT url identifier: base64url of the URL with no padding (Buffer's "base64url" has none).
+// VT url identifier: base64url of the URL with no padding
 function toVtId(href: string) {
     return Buffer.from(href).toString("base64url");
 }
@@ -119,8 +112,8 @@ function vtFetch(
     });
 }
 
-// Runs a handler with the API key check and one place that turns network
-// failures and timeouts into JSON errors instead of unhandled 500s.
+// A shared function for running a fetch with the API key and returning JSON
+// error messages for network failures and timeouts
 async function guarded(run: (apiKey: string) => Promise<NextResponse>) {
     const apiKey = process.env.VIRUS_TOTAL_API_KEY;
     if (!apiKey) return fail(500, "upstream_error", "Server is missing its API key.");
@@ -147,9 +140,10 @@ async function readAnalysisId(res: Response): Promise<string | NextResponse> {
     return id;
 }
 
-// Starts an analysis and returns its id (or an error response).
-// Rescan uses POST /urls/{id}/analyse, which only works for URLs VT already
-// knows about, so a 404 there falls through to a normal submit.
+// 1) If rescan is true, requests a rescan of the url and returns its 
+//      analysis id. 
+// 2) If rescan is false (or the rescan fails), requests the analysis for this 
+//      url. 
 async function startAnalysis(
     href: string,
     urlId: string,

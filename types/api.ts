@@ -25,3 +25,10 @@ export type StatsResponse = {
     topDomains: { domain: string; reports: number; latestVerdict: string }[];
     recentFlagged: QrCode[];
 };
+
+export type ScreenshotResponse = {
+    screenshot: { url: string; capturedAt: string; cached: boolean };
+};
+
+// domain is null when the host has no registrable domain (e.g. a bare IP address).
+export type DomainResponse = { domain: DomainInfo | null };
